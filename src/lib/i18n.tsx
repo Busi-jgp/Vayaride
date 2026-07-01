@@ -21,7 +21,6 @@ const LANG_KEY = "vayaride_lang";
 
 type TranslationMap = Record<string, string>;
 
-const STORED = (typeof window !== "undefined" && localStorage.getItem(LANG_KEY)) || "en";
 const FALLBACK: SupportedLang = "en";
 
 // ============================================================
@@ -465,18 +464,23 @@ interface I18nContextType {
 const I18nContext = createContext<I18nContextType | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<SupportedLang>(() => {
-    // Check localStorage
+  const [lang, setLangState] = useState<SupportedLang>("en");
+
+  // Hydrate language preference on mount (client-side only)
+  useEffect(() => {
+    // Try localStorage first
     const stored = localStorage.getItem(LANG_KEY);
-    if (stored && stored in translations) return stored as SupportedLang;
+    if (stored && stored in translations) {
+      setLangState(stored as SupportedLang);
+      return;
+    }
     // Try browser language
     const browser = navigator.language?.slice(0, 2);
     if (browser === "zu" || browser === "xh" || browser === "af" || browser === "st" ||
         browser === "tn" || browser === "ve" || browser === "ts" || browser === "nr") {
-      return browser as SupportedLang;
+      setLangState(browser as SupportedLang);
     }
-    return "en";
-  });
+  }, []);
 
   const setLang = useCallback((newLang: SupportedLang) => {
     setLangState(newLang);
