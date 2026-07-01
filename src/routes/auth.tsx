@@ -57,6 +57,15 @@ function AuthPage() {
   // Supabase may have just processed the OAuth tokens from the URL hash.
   // If a session is now available, redirect to /rides.
   useEffect(() => {
+    // Show OAuth errors from the URL immediately (before session check)
+    const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get("error_description") || params.get("error");
+    if (oauthError) {
+      toast.error(decodeURIComponent(oauthError.replace(/\+/g, " ")));
+      // Clean up the URL so the error doesn't persist on refresh
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
@@ -69,6 +78,15 @@ function AuthPage() {
     const timer = setTimeout(checkSession, 500);
     return () => clearTimeout(timer);
   }, [navigate]);
+
+  // Log the Supabase project URL for debugging OAuth
+  useEffect(() => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    if (supabaseUrl) {
+      console.debug("[Auth] Supabase URL:", supabaseUrl);
+      console.debug("[Auth] Google OAuth callback should be registered as:", supabaseUrl + "/auth/v1/callback");
+    }
+  }, []);
 
   const selectedEmail = email.trim();
 

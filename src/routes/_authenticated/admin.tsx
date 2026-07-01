@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, redirect, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { LayoutDashboard, Car, Users, UserCheck, RotateCcw, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Car, Users, UserCheck, RotateCcw, BarChart3, Hand } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/admin/drivers", label: "Drivers", icon: UserCheck },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/refunds", label: "Refunds", icon: RotateCcw },
+  { href: "/admin/taxi-signs", label: "Taxi Signs", icon: Hand },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
 ];
 

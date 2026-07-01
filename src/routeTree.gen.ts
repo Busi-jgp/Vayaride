@@ -12,14 +12,20 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedTaxiSignsRouteImport } from './routes/_authenticated/taxi-signs'
+import { Route as AuthenticatedSavedRouteImport } from './routes/_authenticated/saved'
+import { Route as AuthenticatedRoutesRouteImport } from './routes/_authenticated/routes'
 import { Route as AuthenticatedRidesRouteImport } from './routes/_authenticated/rides'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
+import { Route as AuthenticatedTaxiSignsAddRouteImport } from './routes/_authenticated/taxi-signs.add'
+import { Route as AuthenticatedTaxiSignsSignIdRouteImport } from './routes/_authenticated/taxi-signs.$signId'
 import { Route as AuthenticatedRidesNewRouteImport } from './routes/_authenticated/rides.new'
 import { Route as AuthenticatedRidesRideIdRouteImport } from './routes/_authenticated/rides.$rideId'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
+import { Route as AuthenticatedAdminTaxiSignsRouteImport } from './routes/_authenticated/admin/taxi-signs'
 import { Route as AuthenticatedAdminRidesRouteImport } from './routes/_authenticated/admin/rides'
 import { Route as AuthenticatedAdminRefundsRouteImport } from './routes/_authenticated/admin/refunds'
 import { Route as AuthenticatedAdminDriversRouteImport } from './routes/_authenticated/admin/drivers'
@@ -38,6 +44,21 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedTaxiSignsRoute = AuthenticatedTaxiSignsRouteImport.update({
+  id: '/taxi-signs',
+  path: '/taxi-signs',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedSavedRoute = AuthenticatedSavedRouteImport.update({
+  id: '/saved',
+  path: '/saved',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedRoutesRoute = AuthenticatedRoutesRouteImport.update({
+  id: '/routes',
+  path: '/routes',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedRidesRoute = AuthenticatedRidesRouteImport.update({
   id: '/rides',
@@ -64,6 +85,18 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
+const AuthenticatedTaxiSignsAddRoute =
+  AuthenticatedTaxiSignsAddRouteImport.update({
+    id: '/add',
+    path: '/add',
+    getParentRoute: () => AuthenticatedTaxiSignsRoute,
+  } as any)
+const AuthenticatedTaxiSignsSignIdRoute =
+  AuthenticatedTaxiSignsSignIdRouteImport.update({
+    id: '/$signId',
+    path: '/$signId',
+    getParentRoute: () => AuthenticatedTaxiSignsRoute,
+  } as any)
 const AuthenticatedRidesNewRoute = AuthenticatedRidesNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -80,6 +113,12 @@ const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthenticatedAdminRoute,
 } as any)
+const AuthenticatedAdminTaxiSignsRoute =
+  AuthenticatedAdminTaxiSignsRouteImport.update({
+    id: '/taxi-signs',
+    path: '/taxi-signs',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminRidesRoute = AuthenticatedAdminRidesRouteImport.update({
   id: '/rides',
   path: '/rides',
@@ -111,13 +150,19 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/rides': typeof AuthenticatedRidesRouteWithChildren
+  '/routes': typeof AuthenticatedRoutesRoute
+  '/saved': typeof AuthenticatedSavedRoute
+  '/taxi-signs': typeof AuthenticatedTaxiSignsRouteWithChildren
   '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
   '/admin/drivers': typeof AuthenticatedAdminDriversRoute
   '/admin/refunds': typeof AuthenticatedAdminRefundsRoute
   '/admin/rides': typeof AuthenticatedAdminRidesRoute
+  '/admin/taxi-signs': typeof AuthenticatedAdminTaxiSignsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/rides/$rideId': typeof AuthenticatedRidesRideIdRoute
   '/rides/new': typeof AuthenticatedRidesNewRoute
+  '/taxi-signs/$signId': typeof AuthenticatedTaxiSignsSignIdRoute
+  '/taxi-signs/add': typeof AuthenticatedTaxiSignsAddRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
 }
 export interface FileRoutesByTo {
@@ -126,13 +171,19 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/rides': typeof AuthenticatedRidesRouteWithChildren
+  '/routes': typeof AuthenticatedRoutesRoute
+  '/saved': typeof AuthenticatedSavedRoute
+  '/taxi-signs': typeof AuthenticatedTaxiSignsRouteWithChildren
   '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
   '/admin/drivers': typeof AuthenticatedAdminDriversRoute
   '/admin/refunds': typeof AuthenticatedAdminRefundsRoute
   '/admin/rides': typeof AuthenticatedAdminRidesRoute
+  '/admin/taxi-signs': typeof AuthenticatedAdminTaxiSignsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/rides/$rideId': typeof AuthenticatedRidesRideIdRoute
   '/rides/new': typeof AuthenticatedRidesNewRoute
+  '/taxi-signs/$signId': typeof AuthenticatedTaxiSignsSignIdRoute
+  '/taxi-signs/add': typeof AuthenticatedTaxiSignsAddRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
 }
 export interface FileRoutesById {
@@ -144,13 +195,19 @@ export interface FileRoutesById {
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/rides': typeof AuthenticatedRidesRouteWithChildren
+  '/_authenticated/routes': typeof AuthenticatedRoutesRoute
+  '/_authenticated/saved': typeof AuthenticatedSavedRoute
+  '/_authenticated/taxi-signs': typeof AuthenticatedTaxiSignsRouteWithChildren
   '/_authenticated/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
   '/_authenticated/admin/drivers': typeof AuthenticatedAdminDriversRoute
   '/_authenticated/admin/refunds': typeof AuthenticatedAdminRefundsRoute
   '/_authenticated/admin/rides': typeof AuthenticatedAdminRidesRoute
+  '/_authenticated/admin/taxi-signs': typeof AuthenticatedAdminTaxiSignsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/rides/$rideId': typeof AuthenticatedRidesRideIdRoute
   '/_authenticated/rides/new': typeof AuthenticatedRidesNewRoute
+  '/_authenticated/taxi-signs/$signId': typeof AuthenticatedTaxiSignsSignIdRoute
+  '/_authenticated/taxi-signs/add': typeof AuthenticatedTaxiSignsAddRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
 }
 export interface FileRouteTypes {
@@ -162,13 +219,19 @@ export interface FileRouteTypes {
     | '/history'
     | '/profile'
     | '/rides'
+    | '/routes'
+    | '/saved'
+    | '/taxi-signs'
     | '/admin/analytics'
     | '/admin/drivers'
     | '/admin/refunds'
     | '/admin/rides'
+    | '/admin/taxi-signs'
     | '/admin/users'
     | '/rides/$rideId'
     | '/rides/new'
+    | '/taxi-signs/$signId'
+    | '/taxi-signs/add'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -177,13 +240,19 @@ export interface FileRouteTypes {
     | '/history'
     | '/profile'
     | '/rides'
+    | '/routes'
+    | '/saved'
+    | '/taxi-signs'
     | '/admin/analytics'
     | '/admin/drivers'
     | '/admin/refunds'
     | '/admin/rides'
+    | '/admin/taxi-signs'
     | '/admin/users'
     | '/rides/$rideId'
     | '/rides/new'
+    | '/taxi-signs/$signId'
+    | '/taxi-signs/add'
     | '/admin'
   id:
     | '__root__'
@@ -194,13 +263,19 @@ export interface FileRouteTypes {
     | '/_authenticated/history'
     | '/_authenticated/profile'
     | '/_authenticated/rides'
+    | '/_authenticated/routes'
+    | '/_authenticated/saved'
+    | '/_authenticated/taxi-signs'
     | '/_authenticated/admin/analytics'
     | '/_authenticated/admin/drivers'
     | '/_authenticated/admin/refunds'
     | '/_authenticated/admin/rides'
+    | '/_authenticated/admin/taxi-signs'
     | '/_authenticated/admin/users'
     | '/_authenticated/rides/$rideId'
     | '/_authenticated/rides/new'
+    | '/_authenticated/taxi-signs/$signId'
+    | '/_authenticated/taxi-signs/add'
     | '/_authenticated/admin/'
   fileRoutesById: FileRoutesById
 }
@@ -232,6 +307,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/taxi-signs': {
+      id: '/_authenticated/taxi-signs'
+      path: '/taxi-signs'
+      fullPath: '/taxi-signs'
+      preLoaderRoute: typeof AuthenticatedTaxiSignsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/saved': {
+      id: '/_authenticated/saved'
+      path: '/saved'
+      fullPath: '/saved'
+      preLoaderRoute: typeof AuthenticatedSavedRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/routes': {
+      id: '/_authenticated/routes'
+      path: '/routes'
+      fullPath: '/routes'
+      preLoaderRoute: typeof AuthenticatedRoutesRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/rides': {
       id: '/_authenticated/rides'
@@ -268,6 +364,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/taxi-signs/add': {
+      id: '/_authenticated/taxi-signs/add'
+      path: '/add'
+      fullPath: '/taxi-signs/add'
+      preLoaderRoute: typeof AuthenticatedTaxiSignsAddRouteImport
+      parentRoute: typeof AuthenticatedTaxiSignsRoute
+    }
+    '/_authenticated/taxi-signs/$signId': {
+      id: '/_authenticated/taxi-signs/$signId'
+      path: '/$signId'
+      fullPath: '/taxi-signs/$signId'
+      preLoaderRoute: typeof AuthenticatedTaxiSignsSignIdRouteImport
+      parentRoute: typeof AuthenticatedTaxiSignsRoute
+    }
     '/_authenticated/rides/new': {
       id: '/_authenticated/rides/new'
       path: '/new'
@@ -287,6 +397,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/admin/users'
       preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/taxi-signs': {
+      id: '/_authenticated/admin/taxi-signs'
+      path: '/taxi-signs'
+      fullPath: '/admin/taxi-signs'
+      preLoaderRoute: typeof AuthenticatedAdminTaxiSignsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
     '/_authenticated/admin/rides': {
@@ -325,6 +442,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminDriversRoute: typeof AuthenticatedAdminDriversRoute
   AuthenticatedAdminRefundsRoute: typeof AuthenticatedAdminRefundsRoute
   AuthenticatedAdminRidesRoute: typeof AuthenticatedAdminRidesRoute
+  AuthenticatedAdminTaxiSignsRoute: typeof AuthenticatedAdminTaxiSignsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
@@ -334,6 +452,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminDriversRoute: AuthenticatedAdminDriversRoute,
   AuthenticatedAdminRefundsRoute: AuthenticatedAdminRefundsRoute,
   AuthenticatedAdminRidesRoute: AuthenticatedAdminRidesRoute,
+  AuthenticatedAdminTaxiSignsRoute: AuthenticatedAdminTaxiSignsRoute,
   AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
 }
@@ -354,11 +473,30 @@ const AuthenticatedRidesRouteChildren: AuthenticatedRidesRouteChildren = {
 const AuthenticatedRidesRouteWithChildren =
   AuthenticatedRidesRoute._addFileChildren(AuthenticatedRidesRouteChildren)
 
+interface AuthenticatedTaxiSignsRouteChildren {
+  AuthenticatedTaxiSignsSignIdRoute: typeof AuthenticatedTaxiSignsSignIdRoute
+  AuthenticatedTaxiSignsAddRoute: typeof AuthenticatedTaxiSignsAddRoute
+}
+
+const AuthenticatedTaxiSignsRouteChildren: AuthenticatedTaxiSignsRouteChildren =
+  {
+    AuthenticatedTaxiSignsSignIdRoute: AuthenticatedTaxiSignsSignIdRoute,
+    AuthenticatedTaxiSignsAddRoute: AuthenticatedTaxiSignsAddRoute,
+  }
+
+const AuthenticatedTaxiSignsRouteWithChildren =
+  AuthenticatedTaxiSignsRoute._addFileChildren(
+    AuthenticatedTaxiSignsRouteChildren,
+  )
+
 interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRidesRoute: typeof AuthenticatedRidesRouteWithChildren
+  AuthenticatedRoutesRoute: typeof AuthenticatedRoutesRoute
+  AuthenticatedSavedRoute: typeof AuthenticatedSavedRoute
+  AuthenticatedTaxiSignsRoute: typeof AuthenticatedTaxiSignsRouteWithChildren
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -366,6 +504,9 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRidesRoute: AuthenticatedRidesRouteWithChildren,
+  AuthenticatedRoutesRoute: AuthenticatedRoutesRoute,
+  AuthenticatedSavedRoute: AuthenticatedSavedRoute,
+  AuthenticatedTaxiSignsRoute: AuthenticatedTaxiSignsRouteWithChildren,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
