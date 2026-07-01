@@ -468,14 +468,19 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // Hydrate language preference on mount (client-side only)
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     // Try localStorage first
-    const stored = localStorage.getItem(LANG_KEY);
+    const stored = window.localStorage.getItem(LANG_KEY);
     if (stored && stored in translations) {
       setLangState(stored as SupportedLang);
       return;
     }
+
     // Try browser language
-    const browser = navigator.language?.slice(0, 2);
+    const browser = window.navigator.language?.slice(0, 2);
     if (browser === "zu" || browser === "xh" || browser === "af" || browser === "st" ||
         browser === "tn" || browser === "ve" || browser === "ts" || browser === "nr") {
       setLangState(browser as SupportedLang);
@@ -484,7 +489,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLang = useCallback((newLang: SupportedLang) => {
     setLangState(newLang);
-    localStorage.setItem(LANG_KEY, newLang);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LANG_KEY, newLang);
+    }
   }, []);
 
   // Sync with server preference if logged in
