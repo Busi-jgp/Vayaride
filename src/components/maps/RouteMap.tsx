@@ -22,9 +22,9 @@ export function RouteMap({ pickupLat, pickupLng, dropoffLat, dropoffLng, liveLat
   useEffect(() => {
     if (!ref.current || pickupLat == null || dropoffLat == null) return;
     let cancelled = false;
-    loadGoogleMaps().then((g) => {
+    loadGoogleMaps().then((maps) => {
       if (cancelled || !ref.current) return;
-      const map = new g.maps.Map(ref.current, {
+      const map = new maps.Map(ref.current, {
         center: { lat: pickupLat, lng: pickupLng! },
         zoom: 11,
         disableDefaultUI: true,
@@ -33,9 +33,9 @@ export function RouteMap({ pickupLat, pickupLng, dropoffLat, dropoffLng, liveLat
       });
       mapRef.current = map;
 
-      new g.maps.Marker({ map, position: { lat: pickupLat, lng: pickupLng! }, label: "A" });
-      new g.maps.Marker({ map, position: { lat: dropoffLat, lng: dropoffLng! }, label: "B" });
-      new g.maps.Polyline({
+      new maps.Marker({ map, position: { lat: pickupLat, lng: pickupLng! }, label: "A" });
+      new maps.Marker({ map, position: { lat: dropoffLat, lng: dropoffLng! }, label: "B" });
+      new maps.Polyline({
         map,
         path: [{ lat: pickupLat, lng: pickupLng! }, { lat: dropoffLat, lng: dropoffLng! }],
         strokeColor: "#1f7a4e",
@@ -43,7 +43,7 @@ export function RouteMap({ pickupLat, pickupLng, dropoffLat, dropoffLng, liveLat
         strokeWeight: 4,
       });
 
-      const bounds = new g.maps.LatLngBounds();
+      const bounds = new maps.LatLngBounds();
       bounds.extend({ lat: pickupLat, lng: pickupLng! });
       bounds.extend({ lat: dropoffLat, lng: dropoffLng! });
       map.fitBounds(bounds, 60);
@@ -54,14 +54,14 @@ export function RouteMap({ pickupLat, pickupLng, dropoffLat, dropoffLng, liveLat
   // Live driver marker update
   useEffect(() => {
     if (!mapRef.current || liveLat == null || liveLng == null) return;
-    loadGoogleMaps().then((g) => {
+    loadGoogleMaps().then((maps) => {
       const pos = { lat: liveLat, lng: liveLng };
       if (!driverMarkerRef.current) {
-        driverMarkerRef.current = new g.maps.Marker({
+        driverMarkerRef.current = new maps.Marker({
           map: mapRef.current!,
           position: pos,
           icon: {
-            path: g.maps.SymbolPath.CIRCLE,
+            path: maps.SymbolPath.CIRCLE,
             scale: 8,
             fillColor: "#e67e22",
             fillOpacity: 1,

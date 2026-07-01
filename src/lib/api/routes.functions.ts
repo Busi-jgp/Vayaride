@@ -2,8 +2,9 @@ import { createServerFn } from "@tanstack/react-start";
 
 // Calls the Google Routes API directly using your own server-side API key.
 // Set GOOGLE_MAPS_API_KEY in your .env (server-side, never expose to the browser).
-export const computeRoute = createServerFn({ method: "GET" }).handler(
-  async ({ data }: { data: { originLat: number; originLng: number; destLat: number; destLng: number } }) => {
+export const computeRoute = createServerFn({ method: "GET" })
+  .validator((data: { originLat: number; originLng: number; destLat: number; destLng: number }) => data)
+  .handler(async ({ data }) => {
     const key = process.env.GOOGLE_MAPS_API_KEY;
     if (!key) return { distance_km: null, duration_min: null };
 
@@ -31,5 +32,4 @@ export const computeRoute = createServerFn({ method: "GET" }).handler(
       distance_km: route ? +(route.distanceMeters / 1000).toFixed(2) : null,
       duration_min: route ? Math.round(parseInt(route.duration) / 60) : null,
     };
-  },
-);
+  });

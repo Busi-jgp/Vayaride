@@ -59,12 +59,12 @@ function TaxiSignsPage() {
   // Load saved sign IDs
   useEffect(() => {
     if (!user) return;
-    supabase
+    (supabase as any)
       .from("saved_taxi_signs")
       .select("sign_id")
       .eq("user_id", user.id)
-      .then(({ data }) => {
-        if (data) setSavedIds(new Set(data.map((s) => s.sign_id)));
+      .then(({ data }: { data: any[] | null }) => {
+        if (data) setSavedIds(new Set(data.map((s: any) => s.sign_id)));
       });
   }, [user]);
 
@@ -73,7 +73,7 @@ function TaxiSignsPage() {
     setLoading(true);
     setSearched(true);
 
-    let queryBuilder = supabase
+    let queryBuilder = (supabase as any)
       .from("taxi_signs")
       .select("*")
       .eq("status", "approved");
@@ -116,7 +116,7 @@ function TaxiSignsPage() {
           if (city) {
             setUserLocation((prev) => ({ ...prev, city }));
             // Auto-search for nearby signs
-            const { data: nearby } = await supabase
+      const { data: nearby } = await (supabase as any)
               .from("taxi_signs")
               .select("*")
               .eq("status", "approved")
@@ -139,14 +139,14 @@ function TaxiSignsPage() {
   const toggleSave = async (signId: string) => {
     if (!user) return;
     if (savedIds.has(signId)) {
-      await supabase
+      await (supabase as any)
         .from("saved_taxi_signs")
         .delete()
         .eq("user_id", user.id)
         .eq("sign_id", signId);
       setSavedIds((prev) => { const next = new Set(prev); next.delete(signId); return next; });
     } else {
-      await supabase
+      await (supabase as any)
         .from("saved_taxi_signs")
         .insert({ user_id: user.id, sign_id: signId });
       setSavedIds((prev) => { const next = new Set(prev); next.add(signId); return next; });

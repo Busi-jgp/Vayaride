@@ -62,7 +62,7 @@ function IndexPage() {
       if (locations) setSavedLocations(locations as SavedLocation[]);
 
       // Load some taxi signs
-      const { data: signs } = await supabase
+      const { data: signs } = await (supabase as any)
         .from("taxi_signs")
         .select("id, destination, city, province, taxi_rank, hand_sign_description, verified")
         .eq("status", "approved")

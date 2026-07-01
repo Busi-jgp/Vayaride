@@ -49,7 +49,7 @@ function NewRide() {
             originLat: form.pickup_lat, originLng: form.pickup_lng!,
             destLat: form.dropoff_lat, destLng: form.dropoff_lng!,
           },
-        });
+        } as any);
         distance_km = r.distance_km;
         duration_min = r.duration_min;
       } catch (err) { console.warn("route compute failed", err); }

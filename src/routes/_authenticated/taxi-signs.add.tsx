@@ -47,7 +47,7 @@ function AddTaxiSignPage() {
     }
 
     setSubmitting(true);
-    const { error } = await supabase.from("taxi_signs").insert({
+    const { error } = await (supabase as any).from("taxi_signs").insert({
       province,
       city,
       suburb,

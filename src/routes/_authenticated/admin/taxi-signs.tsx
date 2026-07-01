@@ -37,7 +37,7 @@ function AdminTaxiSignsPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("taxi_signs")
         .select("*")
         .in("status", ["pending", "approved"])
@@ -54,7 +54,7 @@ function AdminTaxiSignsPage() {
 
   const approveSign = async (id: string) => {
     setActionLoading(id);
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("taxi_signs")
       .update({ status: "approved", verified: true })
       .eq("id", id);
@@ -73,7 +73,7 @@ function AdminTaxiSignsPage() {
 
   const rejectSign = async (id: string) => {
     setActionLoading(id);
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("taxi_signs")
       .update({ status: "rejected" })
       .eq("id", id);

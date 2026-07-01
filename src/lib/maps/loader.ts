@@ -3,10 +3,10 @@
 // Obtain a key at https://console.cloud.google.com — restrict it to HTTP referrers for your domain.
 
 let _loaded = false;
-let _promise: Promise<void> | null = null;
+let _promise: Promise<typeof google.maps> | null = null;
 
-export function loadGoogleMaps(): Promise<void> {
-  if (_loaded) return Promise.resolve();
+export function loadGoogleMaps(): Promise<typeof google.maps> {
+  if (_loaded && typeof google !== "undefined" && google.maps) return Promise.resolve(google.maps);
   if (_promise) return _promise;
 
   _promise = new Promise((resolve, reject) => {
@@ -20,7 +20,14 @@ export function loadGoogleMaps(): Promise<void> {
     script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`;
     script.async = true;
     script.defer = true;
-    script.onload = () => { _loaded = true; resolve(); };
+    script.onload = () => {
+      _loaded = true;
+      if (typeof google !== "undefined" && google.maps) {
+        resolve(google.maps);
+      } else {
+        reject(new Error("Google Maps loaded but `google.maps` is undefined"));
+      }
+    };
     script.onerror = () => reject(new Error("Failed to load Google Maps"));
     document.head.appendChild(script);
   });

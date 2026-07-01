@@ -34,7 +34,7 @@ function SavedPage() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("saved_taxi_signs")
         .select("id, sign_id, taxi_signs!inner(id, destination, city, province, taxi_rank, hand_sign_description, verified)")
         .eq("user_id", user.id)
@@ -46,7 +46,7 @@ function SavedPage() {
   }, [user]);
 
   const removeSign = async (signId: string) => {
-    await supabase
+    await (supabase as any)
       .from("saved_taxi_signs")
       .delete()
       .eq("user_id", user!.id)

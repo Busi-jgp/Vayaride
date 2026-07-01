@@ -43,7 +43,7 @@ function TaxiSignDetailPage() {
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("taxi_signs")
         .select("*")
         .eq("id", signId)
@@ -56,26 +56,26 @@ function TaxiSignDetailPage() {
 
   useEffect(() => {
     if (!user || !signId) return;
-    supabase
+    (supabase as any)
       .from("saved_taxi_signs")
       .select("id")
       .eq("user_id", user.id)
       .eq("sign_id", signId)
       .maybeSingle()
-      .then(({ data }) => setSaved(!!data));
+      .then(({ data }: { data: any }) => setSaved(!!data));
   }, [user, signId]);
 
   const toggleSave = async () => {
     if (!user || !signId) return;
     if (saved) {
-      await supabase
+      await (supabase as any)
         .from("saved_taxi_signs")
         .delete()
         .eq("user_id", user.id)
         .eq("sign_id", signId);
       setSaved(false);
     } else {
-      await supabase
+      await (supabase as any)
         .from("saved_taxi_signs")
         .insert({ user_id: user.id, sign_id: signId });
       setSaved(true);
