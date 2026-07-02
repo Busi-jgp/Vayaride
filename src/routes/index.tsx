@@ -1,12 +1,29 @@
-import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { Search, MapPin, Hand, Map, Home as HomeIcon, Briefcase, ChevronRight, ArrowRight, Users, Banknote, Moon, Shield } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Banknote,
+  Bookmark,
+  Briefcase,
+  ChevronRight,
+  Clock3,
+  Hand,
+  Heart,
+  Home as HomeIcon,
+  Map,
+  MapPin,
+  Moon,
+  Navigation,
+  Search,
+  Shield,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
-import { useAuth } from "@/lib/auth-context";
-import { Input } from "@/components/ui/input";
+import { loadGoogleMaps } from "@/lib/maps/loader";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AppShell } from "@/components/AppShell";
 import { SOSButton } from "@/components/SOSButton";
 
 type SavedLocation = {
@@ -25,19 +42,46 @@ type TaxiSign = {
   verified: boolean;
 };
 
+type RecentSearch = {
+  label: string;
+  savedAt: number;
+};
+
+type RouteSpotlight = {
+  from: string;
+  to: string;
+  taxiRank: string;
+  fare: string;
+  duration: string;
+};
+
+const popularRoutes: RouteSpotlight[] = [
+  { from: "Johannesburg CBD", to: "Soweto", taxiRank: "Nancefield", fare: "R45", duration: "45 min" },
+  { from: "Pretoria CBD", to: "Mamelodi", taxiRank: "Pretoria Station", fare: "R38", duration: "50 min" },
+  { from: "Durban CBD", to: "Umlazi", taxiRank: "Durban Station", fare: "R32", duration: "55 min" },
+];
+
+const serviceAlerts = [
+  "Peak traffic on the M1 northbound near Sandton — expect 10-15 min delays.",
+  "Temporary route updates in Khayelitsha after 18:00.",
+];
+
 export const Route = createFileRoute("/")({
   component: IndexPage,
 });
 
 function IndexPage() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [session, setSession] = useState<any>(null);
   const [checking, setChecking] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]);
   const [nearbySigns, setNearbySigns] = useState<TaxiSign[]>([]);
   const [loading, setLoading] = useState(true);
   const [userCity, setUserCity] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const mapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -46,14 +90,24 @@ function IndexPage() {
     });
   }, []);
 
-  // Load authenticated home data
   useEffect(() => {
-    if (!session) { setLoading(false); return; }
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem("vayaride-recent-searches");
+      if (raw) {
+        setRecentSearches(JSON.parse(raw));
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setLoading(false);
+      return;
+    }
 
     const load = async () => {
       const user = session.user;
-
-      // Load saved locations
       const { data: locations } = await supabase
         .from("saved_locations")
         .select("id, label, address")
@@ -61,7 +115,6 @@ function IndexPage() {
         .order("label");
       if (locations) setSavedLocations(locations as SavedLocation[]);
 
-      // Load some taxi signs
       const { data: signs } = await (supabase as any)
         .from("taxi_signs")
         .select("id, destination, city, province, taxi_rank, hand_sign_description, verified")
@@ -69,7 +122,6 @@ function IndexPage() {
         .limit(4);
       if (signs) setNearbySigns(signs as unknown as TaxiSign[]);
 
-      // Try geolocation
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
@@ -78,198 +130,287 @@ function IndexPage() {
                 `https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.coords.latitude},${pos.coords.longitude}&key=${import.meta.env.VITE_GOOGLE_MAPS_BROWSER_KEY}&result_type=locality`
               );
               const data = await res.json();
-              const city = data.results?.[0]?.address_components?.find((c: any) =>
-                c.types.includes("locality")
-              )?.long_name;
+              const city = data.results?.[0]?.address_components?.find((c: any) => c.types.includes("locality"))?.long_name;
               if (city) setUserCity(city);
             } catch {}
           },
           () => {},
-          { timeout: 5000 },
+          { timeout: 5000 }
         );
       }
 
       setLoading(false);
     };
+
     load();
   }, [session]);
 
+  useEffect(() => {
+    if (!session || !mapRef.current) return;
+    let cancelled = false;
+    loadGoogleMaps()
+      .then((maps) => {
+        if (cancelled || !mapRef.current) return;
+        const center = userCity ? { lat: -26.2041, lng: 28.0473 } : { lat: -26.2041, lng: 28.0473 };
+        const map = new maps.Map(mapRef.current, {
+          center,
+          zoom: 10,
+          disableDefaultUI: true,
+          zoomControl: true,
+          clickableIcons: false,
+        });
+        new maps.Marker({ map, position: center, label: "V" });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session, userCity]);
+
+  const saveSearch = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const next = [{ label: trimmed, savedAt: Date.now() }, ...recentSearches.filter((item) => item.label !== trimmed)].slice(0, 4);
+    setRecentSearches(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("vayaride-recent-searches", JSON.stringify(next));
+    }
+    navigate({ to: "/taxi-signs" });
+  };
+
+  const handleSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    saveSearch(searchQuery);
+  };
+
   if (checking) return null;
 
-  // Authenticated user — show the VayaRide home screen
   if (session) {
     return (
-      <div className="flex flex-col">
-        {/* Welcome header with map area */}
-        <div className="relative h-52 bg-gradient-to-br from-primary/10 to-primary/5 overflow-hidden">
-          <div className="absolute inset-0 opacity-10">
-            <svg viewBox="0 0 400 200" className="w-full h-full">
-              <path d="M0,100 Q100,50 200,100 T400,80 L400,200 L0,200 Z" fill="currentColor" className="text-primary" />
-              <path d="M0,130 Q150,80 300,130 T400,100 L400,200 L0,200 Z" fill="currentColor" className="text-primary/50" />
-            </svg>
-          </div>
+      <div className="flex flex-col bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.12),transparent_55%)] pb-24">
+        <div className="px-4 pt-4">
+          <div className="rounded-[28px] border border-emerald-100 bg-white/90 p-4 shadow-[0_12px_50px_-18px_rgba(0,0,0,0.2)] backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-emerald-700">Welcome back</p>
+                <h1 className="text-2xl font-semibold text-slate-900">{t("appName")}</h1>
+                <p className="mt-1 flex items-center gap-1 text-sm text-slate-600">
+                  <MapPin className="h-4 w-4 text-emerald-600" />
+                  {userCity ?? "Johannesburg"}
+                </p>
+              </div>
+              <div className="rounded-full bg-emerald-600/10 p-2 text-emerald-700">
+                <Sparkles className="h-5 w-5" />
+              </div>
+            </div>
 
-          <div className="relative z-10 p-4 pt-6">
-            <h1 className="text-2xl font-bold">
-              {t("appName")}
-            </h1>
-            {userCity && (
-              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                <MapPin className="h-3.5 w-3.5" />
-                {userCity}
-              </p>
-            )}
-
-            {/* Search bar */}
-            <Link to="/taxi-signs" className="block mt-4">
+            <form onSubmit={handleSearchSubmit} className="mt-4">
+              <label className="mb-2 block text-sm font-medium text-slate-700">Search taxis and signs</label>
               <div className="relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <div className="pl-10 h-12 rounded-xl bg-white/90 dark:bg-gray-900/90 border shadow-sm backdrop-blur text-base flex items-center text-muted-foreground">
-                  {t("searchDestination")}
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search destinations, taxi ranks or signs"
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none ring-0"
+                />
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div className="px-4 pt-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link to="/taxi-signs" className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <Hand className="h-5 w-5" />
+              </div>
+              <p className="font-semibold text-slate-900">Find taxi signs</p>
+              <p className="mt-1 text-sm text-slate-600">Browse route signs and taxi ranks instantly.</p>
+            </Link>
+            <Link to="/routes" className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                <Map className="h-5 w-5" />
+              </div>
+              <p className="font-semibold text-slate-900">Plan a route</p>
+              <p className="mt-1 text-sm text-slate-600">Get fares, travel time and a route preview.</p>
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 px-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Popular routes</h2>
+              <Link to="/routes" className="text-sm font-medium text-emerald-700">Open planner</Link>
+            </div>
+            <div className="space-y-3">
+              {popularRoutes.map((route) => (
+                <div key={`${route.from}-${route.to}`} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+                  <div>
+                    <p className="font-medium text-slate-800">{route.from} → {route.to}</p>
+                    <p className="text-sm text-slate-600">{route.taxiRank}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-emerald-700">{route.fare}</p>
+                    <p className="text-sm text-slate-500">{route.duration}</p>
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Service alerts</h2>
+              <div className="rounded-full bg-amber-100 p-1.5 text-amber-700">
+                <AlertTriangle className="h-4 w-4" />
               </div>
-            </Link>
+            </div>
+            <div className="space-y-2">
+              {serviceAlerts.map((alert) => (
+                <div key={alert} className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-800">
+                  {alert}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Quick actions */}
-        <div className="px-4 -mt-5 z-20">
-          <div className="grid grid-cols-2 gap-3">
-            <Link
-              to="/taxi-signs"
-              className="rounded-xl bg-card border p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                <Hand className="h-5 w-5 text-primary" />
+        <div className="mt-4 grid gap-4 px-4 lg:grid-cols-[1fr_0.95fr]">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Your saved spots</h2>
+              <Link to="/saved" className="text-sm font-medium text-emerald-700">View all</Link>
+            </div>
+            {loading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-16 rounded-2xl" />
+                <Skeleton className="h-16 rounded-2xl" />
               </div>
-              <p className="text-sm font-semibold">{t("findTaxiSign")}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{t("taxiSignsSubtitle")}</p>
-            </Link>
-            <Link
-              to="/routes"
-              className="rounded-xl bg-card border p-4 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center mb-2">
-                <Map className="h-5 w-5 text-accent" />
-              </div>
-              <p className="text-sm font-semibold">{t("planRoute")}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{t("comingSoon")}</p>
-            </Link>
-          </div>
-        </div>
-
-        <div className="px-4 mt-4 space-y-5 pb-4">
-          {/* Saved places */}
-          {savedLocations.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold">{t("savedPlaces")}</h2>
-              </div>
+            ) : savedLocations.length > 0 ? (
               <div className="space-y-2">
                 {savedLocations.map((loc) => (
-                  <div key={loc.id} className="flex items-center gap-3 rounded-xl bg-card border p-3">
-                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
-                      loc.label.toLowerCase() === "home" ? "bg-primary/10 text-primary" :
-                      loc.label.toLowerCase() === "work" ? "bg-accent/10 text-accent" : "bg-muted text-muted-foreground"
-                    }`}>
-                      {loc.label.toLowerCase() === "home" ? <HomeIcon className="h-4 w-4" /> :
-                       loc.label.toLowerCase() === "work" ? <Briefcase className="h-4 w-4" /> :
-                       <MapPin className="h-4 w-4" />}
+                  <div key={loc.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                      {loc.label.toLowerCase() === "home" ? <HomeIcon className="h-4 w-4" /> : loc.label.toLowerCase() === "work" ? <BriefcaseIcon /> : <MapPin className="h-4 w-4" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{loc.label}</p>
-                      <p className="text-xs text-muted-foreground truncate">{loc.address}</p>
+                      <p className="truncate font-medium text-slate-800">{loc.label}</p>
+                      <p className="truncate text-sm text-slate-600">{loc.address}</p>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Nearby taxi signs */}
-          {nearbySigns.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold">{t("popularSearches")}</h2>
-                <Link to="/taxi-signs" className="text-xs font-medium text-primary flex items-center gap-0.5">
-                  {t("viewAll")} <ChevronRight className="h-3 w-3" />
-                </Link>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-600">
+                Save your favourite routes and destinations here.
               </div>
+            )}
+          </div>
+
+          <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Recent searches</h2>
+              <div className="rounded-full bg-slate-100 p-1.5 text-slate-600">
+                <Clock3 className="h-4 w-4" />
+              </div>
+            </div>
+            {recentSearches.length > 0 ? (
               <div className="space-y-2">
-                {nearbySigns.map((sign) => (
-                  <Link
-                    key={sign.id}
-                    to="/taxi-signs/$signId"
-                    params={{ signId: sign.id }}
-                    className="flex items-center gap-3 rounded-xl bg-card border p-3 hover:shadow-sm transition-shadow"
-                  >
-                    <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <Hand className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{sign.destination}</p>
-                      <p className="text-xs text-muted-foreground truncate">{sign.city}, {sign.province}</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                  </Link>
+                {recentSearches.map((item) => (
+                  <button key={item.savedAt} onClick={() => setSearchQuery(item.label)} className="flex w-full items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-left text-sm text-slate-700">
+                    <span>{item.label}</span>
+                    <ChevronRight className="h-4 w-4 text-slate-400" />
+                  </button>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-600">
+                Your recent route searches will appear here.
+              </div>
+            )}
+          </div>
+        </div>
 
-          {loading && (
-            <div className="space-y-3">
-              <Skeleton className="h-20 rounded-xl" />
-              <Skeleton className="h-20 rounded-xl" />
+        <div className="mt-4 px-4">
+          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Live city map</p>
+                <p className="text-sm text-slate-600">Nearby taxi activity and route preview</p>
+              </div>
+              <div className="rounded-full bg-emerald-100 p-2 text-emerald-700">
+                <Navigation className="h-4 w-4" />
+              </div>
             </div>
-          )}
+            <div ref={mapRef} className="h-56 w-full bg-slate-50" />
+          </div>
+        </div>
+
+        <div className="mt-4 px-4">
+          <div className="rounded-[28px] border border-slate-200 bg-linear-to-br from-emerald-600 to-emerald-700 p-4 text-white shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-emerald-100">Need help immediately?</p>
+                <p className="text-lg font-semibold">Tap the SOS button for fast support.</p>
+              </div>
+              <div className="rounded-full bg-white/15 p-3">
+                <Shield className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4">
+              <SOSButton />
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Unauthenticated — show the landing page
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary">
-      <header className="px-5 py-5 flex items-center justify-between">
-        <span className="font-bold text-xl text-primary">VayaRide</span>
-        <Link to="/auth" className="text-sm font-medium text-primary hover:underline">Sign in</Link>
+    <div className="min-h-screen bg-linear-to-b from-white to-emerald-50">
+      <header className="flex items-center justify-between px-5 py-5">
+        <span className="text-xl font-bold text-emerald-700">VayaRide</span>
+        <Link to="/auth" className="text-sm font-medium text-emerald-700 hover:underline">Sign in</Link>
       </header>
 
-      <section className="px-5 pt-10 pb-12 max-w-xl mx-auto text-center">
-        <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent-foreground text-xs font-medium mb-4">
-          🇿🇦 Built for South Africa
+      <section className="mx-auto max-w-xl px-5 pb-12 pt-8 text-center">
+        <span className="mb-4 inline-block rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+          Built for South Africa
         </span>
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-          Share the ride.<br /><span className="text-primary">Split the fare.</span>
+        <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+          Ride smarter with <span className="text-emerald-700">VayaRide</span>
         </h1>
-        <p className="mt-4 text-muted-foreground text-base">
-          Affordable group rides and scheduled lifts for after-5pm trips — Vaaloewer to the Vaal Triangle and beyond.
+        <p className="mt-4 text-base text-slate-600">
+          Discover taxi signs, plan routes and stay safe with a polished navigation experience built for everyday journeys.
         </p>
-        <Link
-          to="/auth"
-          className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-primary-foreground font-semibold shadow-lg hover:bg-primary/90"
-        >
+        <Link to="/auth" className="mt-8 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-3 font-semibold text-white shadow-lg hover:bg-emerald-700">
           Get started <ArrowRight className="h-4 w-4" />
         </Link>
       </section>
 
-      <section className="px-5 pb-16 max-w-xl mx-auto grid sm:grid-cols-2 gap-3">
-        <Feature icon={<Banknote className="h-5 w-5" />} title="Cheaper than Uber" body="Split fare with up to 4 other riders." />
-        <Feature icon={<Users className="h-5 w-5" />} title="Lift clubs" body="Join scheduled rides on your usual route." />
-        <Feature icon={<Moon className="h-5 w-5" />} title="After-5pm focus" body="Get home safely when other options dry up." />
-        <Feature icon={<Shield className="h-5 w-5" />} title="SOS built-in" body="One tap to share your location with someone." />
+      <section className="mx-auto grid max-w-xl gap-3 px-5 pb-16 sm:grid-cols-2">
+        <Feature icon={<Banknote className="h-5 w-5" />} title="Trusted fares" body="See clear taxi estimates before you ride." />
+        <Feature icon={<Users className="h-5 w-5" />} title="Route planning" body="Smart route discovery with live map previews." />
+        <Feature icon={<Moon className="h-5 w-5" />} title="Safe after dark" body="Emergency SOS and route awareness built in." />
+        <Feature icon={<Shield className="h-5 w-5" />} title="Reliable guidance" body="Official signage and route information in one view." />
       </section>
     </div>
   );
 }
 
-function Feature({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+function Feature({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
   return (
-    <div className="rounded-2xl bg-card border p-4">
-      <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-2">{icon}</div>
-      <h3 className="font-semibold text-sm">{title}</h3>
-      <p className="text-xs text-muted-foreground mt-1">{body}</p>
+    <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">{icon}</div>
+      <h3 className="font-semibold text-slate-900">{title}</h3>
+      <p className="mt-1 text-sm text-slate-600">{body}</p>
     </div>
   );
+}
+
+function BriefcaseIcon() {
+  return <Briefcase className="h-4 w-4" />;
 }
