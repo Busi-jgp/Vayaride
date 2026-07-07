@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/auth";
 
 type Ctx = {
   user: User | null;
@@ -17,22 +17,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const sub = auth.onAuthStateChange((_e, s) => {
       setSession(s);
       if (s?.user) {
         setTimeout(async () => {
-          const { data } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", s.user.id);
-          setIsAdmin(!!data?.some((r) => r.role === "admin"));
+          const isUserAdmin = await auth.isAdmin(s.user.id);
+          setIsAdmin(isUserAdmin);
         }, 0);
       } else {
         setIsAdmin(false);
       }
     });
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    auth.getSession().then(({ session: s }) => {
+      setSession(s);
       setLoading(false);
     });
     return () => sub.subscription.unsubscribe();

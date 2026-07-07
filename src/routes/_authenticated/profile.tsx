@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Bell, CircleHelp, FileText, Globe2, Lock, LogOut, MoonStar, ShieldCheck, Sparkles, UserRound, WalletCards } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +66,7 @@ function ProfilePage() {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await auth.signOut();
     navigate({ to: "/" });
   };
 

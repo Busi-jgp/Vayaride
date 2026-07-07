@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { loadGoogleMaps } from "@/lib/maps/loader";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,8 +85,8 @@ function IndexPage() {
   const mapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    auth.getSession().then(({ session }) => {
+      setSession(session);
       setChecking(false);
     });
   }, []);

@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { auth } from "@/integrations/auth/index";
+import { auth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-type AuthMode = "signin" | "signup";
+type AuthMode = "signin" | "signup" | "reset";
 type EmailStep = "email" | "details";
 
 export const Route = createFileRoute("/auth")({
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) throw redirect({ to: "/rides" });
+    if (await auth.isAuthenticated()) throw redirect({ to: "/rides" });
   },
   component: AuthPage,
 });
@@ -51,32 +50,25 @@ function AuthPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Handle OAuth callback: after the auth page loads client-side,
-  // Supabase may have just processed the OAuth tokens from the URL hash.
-  // If a session is now available, redirect to /rides.
   useEffect(() => {
-    // Show OAuth errors from the URL immediately (before session check)
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get("error_description") || params.get("error");
     if (oauthError) {
       toast.error(decodeURIComponent(oauthError.replace(/\+/g, " ")));
-      // Clean up the URL so the error doesn't persist on refresh
       window.history.replaceState({}, "", window.location.pathname);
     }
+  }, []);
 
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
+  useEffect(() => {
+    const redirectIfAuthenticated = async () => {
+      if (await auth.isAuthenticated()) {
         navigate({ to: "/rides" });
       }
     };
-    // The OAuth flow lands on /auth (the redirectTo target). The Supabase
-    // client on the client side picks up the access_token from the URL hash
-    // and stores it. We give it a tick to settle, then check for a session.
-    const timer = setTimeout(checkSession, 500);
-    return () => clearTimeout(timer);
+    redirectIfAuthenticated();
   }, [navigate]);
 
   // Log the Supabase project URL for debugging OAuth
@@ -96,6 +88,7 @@ function AuthPage() {
     setPassword("");
     setOtp("");
     setOtpSent(false);
+    setResetSent(false);
   };
 
   const continueEmail = (e: React.FormEvent) => {
@@ -108,26 +101,45 @@ function AuthPage() {
     setEmailStep("details");
   };
 
+  const requestPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const address = email.trim();
+    if (!address) {
+      toast.error("Enter your email to reset your password.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await auth.resetPassword(address);
+    setLoading(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    setResetSent(true);
+    toast.success("Password reset email sent. Check your inbox.");
+  };
+
+  const enterResetMode = () => {
+    selectMode("reset");
+  };
+
+  const returnToSignIn = () => {
+    selectMode("signin");
+  };
+
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email: selectedEmail,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/rides`,
-            data: { full_name: fullName },
-          },
-        });
+        const { error } = await auth.signUpWithEmail(selectedEmail, password, fullName);
         if (error) throw error;
         toast.success("Check your email to confirm your account.");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: selectedEmail,
-          password,
-        });
+        const { error } = await auth.signInWithEmail(selectedEmail, password);
         if (error) throw error;
         navigate({ to: "/rides" });
       }
@@ -147,10 +159,7 @@ function AuthPage() {
 
     setPhone(phoneNumber);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: phoneNumber,
-      options: { shouldCreateUser: mode === "signup" },
-    });
+    const { error } = await auth.signInWithPhoneOtp(phoneNumber, mode === "signup");
     setLoading(false);
 
     if (error) {
@@ -176,11 +185,7 @@ function AuthPage() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({
-      phone: phoneNumber,
-      token: otp.trim(),
-      type: "sms",
-    });
+    const { error } = await auth.verifyPhoneOtp(phoneNumber, otp.trim());
     setLoading(false);
 
     if (error) {
@@ -192,14 +197,10 @@ function AuthPage() {
 
   const oauth = async (provider: "google" | "apple") => {
     setLoading(true);
-    const res = await auth.signInWithOAuth(provider, {
-      // Redirect to /auth so the server-side _authenticated guard doesn't
-      // intercept the OAuth callback and strip the URL hash tokens.
-      redirect_uri: window.location.origin + "/auth",
-      scopes: provider === "apple" ? "name email" : "email profile",
-      extraParams:
-        provider === "google" ? { prompt: "select_account" } : { prompt: "login" },
-    });
+    const res =
+      provider === "google"
+        ? await auth.signInWithGoogle(window.location.origin + "/auth")
+        : await auth.signInWithApple(window.location.origin + "/auth");
 
     if (res.error) {
       setLoading(false);

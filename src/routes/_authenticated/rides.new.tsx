@@ -1,12 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { estimateFare, formatFare, type VehicleType } from "@/lib/pricing";
+import { getCurrentLocation, reverseGeocode } from "@/lib/maps";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PlaceAutocomplete } from "@/components/maps/PlaceAutocomplete";
 import { RouteMap } from "@/components/maps/RouteMap";
@@ -31,18 +34,89 @@ function NewRide() {
     scheduled_time: "",
     total_seats: 3,
     price_per_seat: 30,
+    vehicle_type: "economy" as VehicleType,
     notes: "",
   });
+
+  const [routeInfo, setRouteInfo] = useState<{
+    distance_km: number;
+    duration_min: number;
+    summary: string;
+  } | null>(null);
+  const [fareEstimate, setFareEstimate] = useState<ReturnType<typeof estimateFare> | null>(null);
+
+  useEffect(() => {
+    const computeEstimate = async () => {
+      if (
+        form.pickup_lat == null ||
+        form.dropoff_lat == null ||
+        !form.scheduled_time
+      ) {
+        setRouteInfo(null);
+        setFareEstimate(null);
+        return;
+      }
+
+      try {
+        const route = await compute({
+          data: {
+            originLat: form.pickup_lat,
+            originLng: form.pickup_lng!,
+            destLat: form.dropoff_lat,
+            destLng: form.dropoff_lng!,
+          },
+        } as any);
+
+        if (!route?.distance_km || !route?.duration_min) {
+          setRouteInfo(null);
+          setFareEstimate(null);
+          return;
+        }
+
+        setRouteInfo({
+          distance_km: route.distance_km,
+          duration_min: route.duration_min,
+          summary: route.summary ?? "",
+        });
+
+        setFareEstimate(
+          estimateFare(
+            route.distance_km,
+            route.duration_min,
+            form.vehicle_type,
+            new Date(form.scheduled_time),
+            1,
+            form.total_seats,
+          ),
+        );
+      } catch (error) {
+        console.warn("Failed to compute route estimate", error);
+        setRouteInfo(null);
+        setFareEstimate(null);
+      }
+    };
+
+    computeEstimate();
+  }, [
+    compute,
+    form.pickup_lat,
+    form.pickup_lng,
+    form.dropoff_lat,
+    form.dropoff_lng,
+    form.vehicle_type,
+    form.total_seats,
+    form.scheduled_time,
+  ]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     setLoading(true);
 
-    // Try to fetch a road distance/duration if we have coordinates
-    let distance_km: number | null = null;
-    let duration_min: number | null = null;
-    if (form.pickup_lat != null && form.dropoff_lat != null) {
+    let distance_km = routeInfo?.distance_km ?? null;
+    let duration_min = routeInfo?.duration_min ?? null;
+
+    if (distance_km == null && form.pickup_lat != null && form.dropoff_lat != null) {
       try {
         const r = await compute({
           data: {
@@ -52,7 +126,9 @@ function NewRide() {
         } as any);
         distance_km = r.distance_km;
         duration_min = r.duration_min;
-      } catch (err) { console.warn("route compute failed", err); }
+      } catch (err) {
+        console.warn("route compute failed", err);
+      }
     }
 
     const { data, error } = await supabase
@@ -81,6 +157,25 @@ function NewRide() {
     navigate({ to: "/rides/$rideId", params: { rideId: data.id } });
   };
 
+  const loadCurrentLocation = async (target: "pickup" | "dropoff") => {
+    setLoading(true);
+    try {
+      const { lat, lng } = await getCurrentLocation();
+      const place = await reverseGeocode(lat, lng);
+      if (!place) throw new Error("Unable to resolve address");
+      setForm((prev) => ({
+        ...prev,
+        [`${target}_address`]: place.address,
+        [`${target}_lat`]: place.lat,
+        [`${target}_lng`]: place.lng,
+      } as typeof prev));
+    } catch (err) {
+      toast.error("Could not determine your current location.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="px-4 pt-4 pb-8 max-w-md mx-auto">
       <h1 className="text-2xl font-bold">Offer a ride</h1>
@@ -88,7 +183,18 @@ function NewRide() {
 
       <form onSubmit={submit} className="mt-5 space-y-4">
         <div>
-          <Label>Pickup</Label>
+          <div className="flex items-end justify-between gap-3">
+            <Label>Pickup</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => loadCurrentLocation("pickup")}
+              className="px-2 py-1"
+            >
+              Use current location
+            </Button>
+          </div>
           <PlaceAutocomplete
             value={form.pickup_address}
             placeholder="e.g. Vaaloewer Spar"
@@ -97,7 +203,18 @@ function NewRide() {
           />
         </div>
         <div>
-          <Label>Drop-off</Label>
+          <div className="flex items-end justify-between gap-3">
+            <Label>Drop-off</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => loadCurrentLocation("dropoff")}
+              className="px-2 py-1"
+            >
+              Use current location
+            </Button>
+          </div>
           <PlaceAutocomplete
             value={form.dropoff_address}
             placeholder="e.g. Vanderbijlpark Square"
@@ -125,9 +242,40 @@ function NewRide() {
               onChange={(e) => setForm({ ...form, total_seats: +e.target.value })} />
           </div>
           <div>
-            <Label>Price / seat (R)</Label>
+            <Label>Vehicle type</Label>
+            <Select value={form.vehicle_type} onValueChange={(value) => setForm({ ...form, vehicle_type: value as VehicleType })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Economy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="economy">Economy</SelectItem>
+                  <SelectItem value="comfort">Comfort</SelectItem>
+                  <SelectItem value="xl">XL</SelectItem>
+                  <SelectItem value="cargo">Cargo</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Fare per seat</Label>
             <Input type="number" min={0} value={form.price_per_seat}
               onChange={(e) => setForm({ ...form, price_per_seat: +e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <Label>Estimate</Label>
+            <div className="rounded-xl border bg-muted px-3 py-2 text-sm text-foreground">
+              {fareEstimate ? (
+                <>
+                  <p className="font-semibold">{formatFare(fareEstimate.perSeatFare)} / seat</p>
+                  <p className="text-xs text-muted-foreground">~{fareEstimate.distanceKm.toFixed(1)} km · {fareEstimate.durationMin} min</p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Enter pickup, drop-off, and time to see an estimate.</p>
+              )}
+            </div>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">

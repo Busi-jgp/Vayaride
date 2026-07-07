@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RouteMap } from "@/components/maps/RouteMap";
 import { DriverTrackingControl } from "@/components/maps/DriverTrackingControl";
 import { useLiveRideLocation } from "@/lib/maps/useLiveRideLocation";
+import { getEmergencyNumber, getSafetyChecklist } from "@/lib/safety";
 
 export const Route = createFileRoute("/_authenticated/rides/$rideId")({
   component: RideDetail,
@@ -190,6 +191,21 @@ function RideDetail() {
           ))}
           {joinedCount === 0 && <li className="text-xs text-muted-foreground">No one has joined yet.</li>}
         </ul>
+      </div>
+
+      <div className="mt-4 rounded-2xl border bg-amber-50 p-4">
+        <h3 className="text-sm font-semibold mb-2">Safety checklist</h3>
+        <ul className="space-y-1 text-sm text-slate-700">
+          {getSafetyChecklist().map((item) => (
+            <li key={item} className="flex items-start gap-2">
+              <span className="mt-0.5 h-2.5 w-2.5 rounded-full bg-primary" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs text-slate-600">
+          For urgent support, call <span className="font-semibold">{getEmergencyNumber()}</span>.
+        </p>
       </div>
 
       <div className="mt-4 space-y-2">
