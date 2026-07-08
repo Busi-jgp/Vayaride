@@ -60,6 +60,12 @@ function AuthPage() {
       toast.error(decodeURIComponent(oauthError.replace(/\+/g, " ")));
       window.history.replaceState({}, "", window.location.pathname);
     }
+    // If returning from password reset email with new password token
+    const isReset = params.get("reset") === "true";
+    if (isReset) {
+      setMode("reset");
+      setEmailStep("details");
+    }
   }, []);
 
   useEffect(() => {
@@ -252,7 +258,94 @@ function AuthPage() {
             </TabsList>
 
             <TabsContent value="email" className="mt-4">
-              {emailStep === "email" ? (
+              {mode === "reset" ? (
+                // ── Password Reset Flow ──────────────────────────
+                <div className="mt-4 space-y-3">
+                  {resetSent ? (
+                    <div className="text-center py-4">
+                      <p className="text-sm font-medium">Check your email</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        We sent a password reset link to <strong>{email}</strong>. Click it to reset your password.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={returnToSignIn}
+                      >
+                        Back to sign in
+                      </Button>
+                    </div>
+                  ) : emailStep === "details" ? (
+                    // Update password form (after clicking reset link)
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (password.length < 6) {
+                          toast.error("Password must be at least 6 characters.");
+                          return;
+                        }
+                        setLoading(true);
+                        const { error } = await auth.updatePassword(password);
+                        setLoading(false);
+                        if (error) {
+                          toast.error(error.message);
+                          return;
+                        }
+                        toast.success("Password updated successfully!");
+                        selectMode("signin");
+                      }}
+                      className="space-y-3"
+                    >
+                      <p className="text-sm font-medium">Set a new password</p>
+                      <div>
+                        <Label>New password</Label>
+                        <Input
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          minLength={6}
+                          placeholder="At least 6 characters"
+                        />
+                      </div>
+                      <Button type="submit" disabled={loading} className="w-full h-11">
+                        Update password
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={returnToSignIn}
+                        className="w-full text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Back to sign in
+                      </button>
+                    </form>
+                  ) : (
+                    // Request reset email
+                    <form onSubmit={requestPasswordReset} className="space-y-3">
+                      <p className="text-sm font-medium">Reset your password</p>
+                      <div>
+                        <Label>Email</Label>
+                        <Input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                        />
+                      </div>
+                      <Button type="submit" disabled={loading} className="w-full h-11">
+                        Send reset link
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={returnToSignIn}
+                        className="w-full text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Back to sign in
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ) : emailStep === "email" ? (
                 <form onSubmit={continueEmail} className="space-y-3">
                   <div>
                     <Label>Email</Label>
@@ -305,6 +398,15 @@ function AuthPage() {
                       minLength={6}
                     />
                   </div>
+                  {mode === "signin" && (
+                    <button
+                      type="button"
+                      onClick={enterResetMode}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
                   <Button type="submit" disabled={loading} className="w-full h-11">
                     {mode === "signup" ? "Create account" : "Sign in"}
                   </Button>
