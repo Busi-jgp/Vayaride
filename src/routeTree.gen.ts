@@ -16,6 +16,7 @@ import { Route as AuthenticatedTaxiSignsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedSavedRouteImport } from './routes/_authenticated/saved'
 import { Route as AuthenticatedRoutesRouteImport } from './routes/_authenticated/routes'
 import { Route as AuthenticatedRidesRouteImport } from './routes/_authenticated/rides'
+import { Route as AuthenticatedRideRouteImport } from './routes/_authenticated/ride'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
@@ -63,6 +64,11 @@ const AuthenticatedRoutesRoute = AuthenticatedRoutesRouteImport.update({
 const AuthenticatedRidesRoute = AuthenticatedRidesRouteImport.update({
   id: '/rides',
   path: '/rides',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedRideRoute = AuthenticatedRideRouteImport.update({
+  id: '/ride',
+  path: '/ride',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/history': typeof AuthenticatedHistoryRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/ride': typeof AuthenticatedRideRoute
   '/rides': typeof AuthenticatedRidesRouteWithChildren
   '/routes': typeof AuthenticatedRoutesRoute
   '/saved': typeof AuthenticatedSavedRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/ride': typeof AuthenticatedRideRoute
   '/rides': typeof AuthenticatedRidesRouteWithChildren
   '/routes': typeof AuthenticatedRoutesRoute
   '/saved': typeof AuthenticatedSavedRoute
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/ride': typeof AuthenticatedRideRoute
   '/_authenticated/rides': typeof AuthenticatedRidesRouteWithChildren
   '/_authenticated/routes': typeof AuthenticatedRoutesRoute
   '/_authenticated/saved': typeof AuthenticatedSavedRoute
@@ -218,6 +227,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/history'
     | '/profile'
+    | '/ride'
     | '/rides'
     | '/routes'
     | '/saved'
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/history'
     | '/profile'
+    | '/ride'
     | '/rides'
     | '/routes'
     | '/saved'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/_authenticated/history'
     | '/_authenticated/profile'
+    | '/_authenticated/ride'
     | '/_authenticated/rides'
     | '/_authenticated/routes'
     | '/_authenticated/saved'
@@ -334,6 +346,13 @@ declare module '@tanstack/react-router' {
       path: '/rides'
       fullPath: '/rides'
       preLoaderRoute: typeof AuthenticatedRidesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/ride': {
+      id: '/_authenticated/ride'
+      path: '/ride'
+      fullPath: '/ride'
+      preLoaderRoute: typeof AuthenticatedRideRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/profile': {
@@ -493,6 +512,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedRideRoute: typeof AuthenticatedRideRoute
   AuthenticatedRidesRoute: typeof AuthenticatedRidesRouteWithChildren
   AuthenticatedRoutesRoute: typeof AuthenticatedRoutesRoute
   AuthenticatedSavedRoute: typeof AuthenticatedSavedRoute
@@ -503,6 +523,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedRideRoute: AuthenticatedRideRoute,
   AuthenticatedRidesRoute: AuthenticatedRidesRouteWithChildren,
   AuthenticatedRoutesRoute: AuthenticatedRoutesRoute,
   AuthenticatedSavedRoute: AuthenticatedSavedRoute,
