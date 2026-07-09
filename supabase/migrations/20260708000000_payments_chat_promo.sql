@@ -57,7 +57,7 @@ CREATE POLICY "Admins can manage promo codes"
 -- ── Ride Messages (Chat) ───────────────────────────────
 CREATE TABLE IF NOT EXISTS public.ride_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  ride_id UUID NOT NULL REFERENCES public.ride_requests(id) ON DELETE CASCADE,
+  ride_id UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
@@ -71,7 +71,8 @@ CREATE POLICY "Ride participants can read messages"
   ON public.ride_messages FOR SELECT TO authenticated
   USING (
     auth.uid() = sender_id OR auth.uid() = receiver_id
-    OR EXISTS (SELECT 1 FROM public.active_rides ar WHERE ar.id = ride_id AND (ar.driver_id = auth.uid() OR ar.rider_id = auth.uid()))
+    OR EXISTS (SELECT 1 FROM public.ride_participants rp WHERE rp.ride_id = ride_id AND rp.user_id = auth.uid() AND rp.cancelled_at IS NULL)
+    OR EXISTS (SELECT 1 FROM public.rides r WHERE r.id = ride_id AND r.driver_id = auth.uid())
   );
 CREATE POLICY "Ride participants can send messages"
   ON public.ride_messages FOR INSERT TO authenticated
@@ -86,14 +87,14 @@ CREATE INDEX IF NOT EXISTS idx_ride_messages_sender ON public.ride_messages(send
 CREATE INDEX IF NOT EXISTS idx_ride_messages_receiver ON public.ride_messages(receiver_id);
 CREATE INDEX IF NOT EXISTS idx_promo_codes_code ON public.promo_codes(code);
 
--- Add data column to notifications (if not exists)
+-- Notifications data column
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'data') THEN
     ALTER TABLE public.notifications ADD COLUMN data JSONB;
   END IF;
 END $$;
 
--- Add notification data to realtime publication
+-- Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE public.ride_messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
 

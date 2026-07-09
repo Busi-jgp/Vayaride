@@ -1,6 +1,5 @@
 /**
- * Analytics tracking module.
- * Tracks key metrics for the admin dashboard and internal monitoring.
+ * Analytics tracking module — uses the canonical `rides` table.
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -12,140 +11,158 @@ export type AnalyticsMetric = {
   trend: "up" | "down" | "neutral";
 };
 
-export type DailyStats = {
-  date: string;
-  rides: number;
-  revenue: number;
-  distance_km: number;
-  duration_min: number;
-};
-
 export const analytics = {
-  // ── Get Daily Active Users ─────────────────────────────
-  getDailyActiveUsers: async () => {
+  // ── Daily Active Rides (created today) ────────────────
+  getDailyActiveRides: async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { count } = await supabase
-      .from("ride_requests")
+      .from("rides")
       .select("id", { count: "exact", head: true })
       .gte("created_at", today.toISOString());
     return count ?? 0;
   },
 
-  // ── Get Monthly Active Users ───────────────────────────
-  getMonthlyActiveUsers: async () => {
+  // ── Monthly Active Rides ──────────────────────────────
+  getMonthlyActiveRides: async () => {
     const firstOfMonth = new Date();
     firstOfMonth.setDate(1);
     firstOfMonth.setHours(0, 0, 0, 0);
     const { count } = await supabase
-      .from("ride_requests")
+      .from("rides")
       .select("id", { count: "exact", head: true })
       .gte("created_at", firstOfMonth.toISOString());
     return count ?? 0;
   },
 
-  // ── Get Completed Rides Count ──────────────────────────
+  // ── Completed Rides ──────────────────────────────────
   getCompletedRides: async () => {
     const { count } = await supabase
-      .from("completed_rides")
-      .select("id", { count: "exact", head: true });
+      .from("rides")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "completed");
     return count ?? 0;
   },
 
-  // ── Get Cancellation Rate ──────────────────────────────
+  // ── Cancellation Rate ────────────────────────────────
   getCancellationRate: async () => {
     const { count: total } = await supabase
-      .from("ride_requests")
+      .from("rides")
       .select("id", { count: "exact", head: true });
     const { count: cancelled } = await supabase
-      .from("ride_requests")
+      .from("rides")
       .select("id", { count: "exact", head: true })
       .eq("status", "cancelled");
     if (!total) return 0;
     return Math.round((cancelled ?? 0) / total * 100);
   },
 
-  // ── Get Total Revenue ──────────────────────────────────
+  // ── Total Revenue (sum of price_per_seat for completed rides) ─
   getTotalRevenue: async () => {
     const { data } = await supabase
-      .from("payments")
-      .select("amount")
-      .eq("status", "paid");
+      .from("rides")
+      .select("price_per_seat, available_seats, total_seats")
+      .eq("status", "completed");
     if (!data) return 0;
-    return (data as any[]).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+    return (data as any[]).reduce((sum: number, r: any) => {
+      const seatsTaken = (r.total_seats ?? 0) - (r.available_seats ?? 0);
+      return sum + (r.price_per_seat ?? 0) * Math.max(seatsTaken, 1);
+    }, 0);
   },
 
-  // ── Get Revenue for Period ─────────────────────────────
+  // ── Revenue for Period ────────────────────────────────
   getRevenueForPeriod: async (startDate: string, endDate: string) => {
     const { data } = await supabase
-      .from("payments")
-      .select("amount")
-      .eq("status", "paid")
+      .from("rides")
+      .select("price_per_seat, available_seats, total_seats")
+      .eq("status", "completed")
       .gte("created_at", startDate)
       .lte("created_at", endDate);
     if (!data) return 0;
-    return (data as any[]).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+    return (data as any[]).reduce((sum: number, r: any) => {
+      const seatsTaken = (r.total_seats ?? 0) - (r.available_seats ?? 0);
+      return sum + (r.price_per_seat ?? 0) * Math.max(seatsTaken, 1);
+    }, 0);
   },
 
-  // ── Get Daily Revenue (today) ──────────────────────────
   getDailyRevenue: async () => {
     const today = new Date().toISOString().slice(0, 10);
     return analytics.getRevenueForPeriod(`${today}T00:00:00Z`, `${today}T23:59:59Z`);
   },
 
-  // ── Get Weekly Revenue ─────────────────────────────────
   getWeeklyRevenue: async () => {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     return analytics.getRevenueForPeriod(weekAgo.toISOString(), new Date().toISOString());
   },
 
-  // ── Get Monthly Revenue ────────────────────────────────
   getMonthlyRevenue: async () => {
     const firstOfMonth = new Date();
     firstOfMonth.setDate(1);
     return analytics.getRevenueForPeriod(firstOfMonth.toISOString(), new Date().toISOString());
   },
 
-  // ── Get Active Drivers ─────────────────────────────────
-  getActiveDrivers: async () => {
+  // ── Active Rides (currently active) ───────────────────
+  getActiveRideCount: async () => {
     const { count } = await supabase
-      .from("drivers")
+      .from("rides")
       .select("id", { count: "exact", head: true })
-      .eq("status", "verified");
+      .eq("status", "active");
     return count ?? 0;
   },
 
-  // ── Get Dashboard Metrics ──────────────────────────────
+  // ── Get Dashboard Metrics ────────────────────────────
   getDashboardMetrics: async (): Promise<AnalyticsMetric[]> => {
-    const [dailyUsers, monthlyUsers, completedRides, cancellationRate, dailyRevenue, weeklyRevenue, monthlyRevenue, activeDrivers] =
+    const [daily, monthly, completed, cancelled, dailyRev, weeklyRev, monthlyRev, active] =
       await Promise.all([
-        analytics.getDailyActiveUsers(),
-        analytics.getMonthlyActiveUsers(),
+        analytics.getDailyActiveRides(),
+        analytics.getMonthlyActiveRides(),
         analytics.getCompletedRides(),
         analytics.getCancellationRate(),
         analytics.getDailyRevenue(),
         analytics.getWeeklyRevenue(),
         analytics.getMonthlyRevenue(),
-        analytics.getActiveDrivers(),
+        analytics.getActiveRideCount(),
       ]);
 
     return [
-      { label: "Daily Active Users", value: dailyUsers, change: 0, trend: "neutral" },
-      { label: "Monthly Active Users", value: monthlyUsers, change: 0, trend: "neutral" },
-      { label: "Completed Rides", value: completedRides, change: 0, trend: "neutral" },
-      { label: "Cancellation Rate", value: cancellationRate, change: 0, trend: cancellationRate < 20 ? "up" : "down" },
-      { label: "Daily Revenue (R)", value: dailyRevenue, change: 0, trend: "neutral" },
-      { label: "Weekly Revenue (R)", value: weeklyRevenue, change: 0, trend: "neutral" },
-      { label: "Monthly Revenue (R)", value: monthlyRevenue, change: 0, trend: "neutral" },
-      { label: "Active Drivers", value: activeDrivers, change: 0, trend: "neutral" },
+      { label: "Daily Rides", value: daily, change: 0, trend: "neutral" },
+      { label: "Monthly Rides", value: monthly, change: 0, trend: "neutral" },
+      { label: "Completed Rides", value: completed, change: 0, trend: "neutral" },
+      { label: "Cancellation Rate (%)", value: cancelled, change: 0, trend: cancelled < 20 ? "up" : "down" },
+      { label: "Daily Revenue (R)", value: dailyRev, change: 0, trend: "neutral" },
+      { label: "Weekly Revenue (R)", value: weeklyRev, change: 0, trend: "neutral" },
+      { label: "Monthly Revenue (R)", value: monthlyRev, change: 0, trend: "neutral" },
+      { label: "Active Rides", value: active, change: 0, trend: "neutral" },
     ];
   },
 
-  // ── Get Peak Hours ─────────────────────────────────────
+  // ── Average Trip Distance ────────────────────────────
+  getAverageTripDistance: async () => {
+    const { data } = await supabase
+      .from("rides")
+      .select("distance_km")
+      .eq("status", "completed");
+    if (!data || !data.length) return 0;
+    const total = (data as any[]).reduce((sum: number, r: any) => sum + (r.distance_km ?? 0), 0);
+    return Math.round((total / data.length) * 100) / 100;
+  },
+
+  // ── Average Trip Duration ────────────────────────────
+  getAverageTripDuration: async () => {
+    const { data } = await supabase
+      .from("rides")
+      .select("duration_min")
+      .eq("status", "completed");
+    if (!data || !data.length) return 0;
+    const total = (data as any[]).reduce((sum: number, r: any) => sum + (r.duration_min ?? 0), 0);
+    return Math.round(total / data.length);
+  },
+
+  // ── Peak Hours ───────────────────────────────────────
   getPeakHours: async () => {
     const { data } = await supabase
-      .from("ride_requests")
+      .from("rides")
       .select("created_at");
     if (!data) return [];
     const hours: Record<number, number> = {};
@@ -156,37 +173,5 @@ export const analytics = {
     return Object.entries(hours)
       .map(([hour, count]) => ({ hour: parseInt(hour), count }))
       .sort((a, b) => b.count - a.count);
-  },
-
-  // ── Get Average Trip Distance ──────────────────────────
-  getAverageTripDistance: async () => {
-    const { data } = await supabase
-      .from("completed_rides")
-      .select("distance_meters");
-    if (!data || !data.length) return 0;
-    const total = (data as any[]).reduce((sum: number, r: any) => sum + (r.distance_meters ?? 0), 0);
-    return Math.round((total / data.length / 1000) * 100) / 100;
-  },
-
-  // ── Get Average Trip Duration ──────────────────────────
-  getAverageTripDuration: async () => {
-    const { data } = await supabase
-      .from("completed_rides")
-      .select("duration_seconds");
-    if (!data || !data.length) return 0;
-    const total = (data as any[]).reduce((sum: number, r: any) => sum + (r.duration_seconds ?? 0), 0);
-    return Math.round(total / data.length / 60);
-  },
-
-  // ── Get Driver Utilization ─────────────────────────────
-  getDriverUtilization: async () => {
-    const { count: totalDrivers } = await supabase
-      .from("drivers")
-      .select("id", { count: "exact", head: true });
-    const { count: activeRides } = await supabase
-      .from("active_rides")
-      .select("id", { count: "exact", head: true });
-    if (!totalDrivers) return 0;
-    return Math.round((activeRides ?? 0) / totalDrivers * 100);
   },
 };
