@@ -1,504 +1,349 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { auth } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 type AuthMode = "signin" | "signup" | "reset";
-type EmailStep = "email" | "details";
+
+const FRIENDLY_ERRORS: Record<string, string> = {
+  "Invalid login credentials": "Incorrect email or password. Please try again.",
+  "Email not confirmed": "Please check your inbox and confirm your email first.",
+  "User already registered": "An account with this email already exists. Try signing in.",
+  "Password should be at least 6 characters": "Password must be at least 6 characters long.",
+  "Unable to validate email or password": "Please enter a valid email and password.",
+};
+
+function friendlyError(raw: string): string {
+  return FRIENDLY_ERRORS[raw] || raw;
+}
+
+function VayaRideLogo() {
+  return (
+    <div className="flex flex-col items-center gap-2 mb-6">
+      <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+        <span className="text-3xl font-bold text-white">V</span>
+      </div>
+      <h1 className="text-2xl font-bold tracking-tight">VayaRide</h1>
+      <p className="text-sm text-muted-foreground">Your ride, your way.</p>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/auth")({
   beforeLoad: async () => {
-    if (await auth.isAuthenticated()) throw redirect({ to: "/rides" });
+    if (await auth.isAuthenticated()) throw redirect({ to: "/" });
   },
   component: AuthPage,
 });
 
-function normalizePhoneNumber(value: string) {
-  const compact = value.replace(/[\s().-]/g, "");
-  if (!compact.startsWith("+")) return compact;
-  return `+${compact.slice(1).replace(/\+/g, "")}`;
-}
-
-function isValidInternationalPhone(value: string) {
-  return /^\+\d{8,15}$/.test(value);
-}
-
-function isMissingPhoneAccountError(message: string) {
-  const lower = message.toLowerCase();
-  return (
-    lower.includes("not found") ||
-    lower.includes("no user") ||
-    lower.includes("user not") ||
-    lower.includes("signup") ||
-    lower.includes("signups")
-  );
-}
-
 function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<AuthMode>("signin");
-  const [emailStep, setEmailStep] = useState<EmailStep>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get("error_description") || params.get("error");
     if (oauthError) {
-      toast.error(decodeURIComponent(oauthError.replace(/\+/g, " ")));
+      const msg = decodeURIComponent(oauthError.replace(/\+/g, " "));
+      setErrorMessage(friendlyError(msg));
       window.history.replaceState({}, "", window.location.pathname);
     }
-    // If returning from password reset email with new password token
-    const isReset = params.get("reset") === "true";
-    if (isReset) {
+    if (params.get("reset") === "true") {
       setMode("reset");
-      setEmailStep("details");
+      setErrorMessage(null);
     }
   }, []);
 
   useEffect(() => {
-    const redirectIfAuthenticated = async () => {
-      if (await auth.isAuthenticated()) {
-        navigate({ to: "/rides" });
-      }
+    const check = async () => {
+      if (await auth.isAuthenticated()) navigate({ to: "/" });
     };
-    redirectIfAuthenticated();
+    check();
   }, [navigate]);
 
-  // Log the Supabase project URL for debugging OAuth
-  useEffect(() => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    if (supabaseUrl) {
-      console.debug("[Auth] Supabase URL:", supabaseUrl);
-      console.debug("[Auth] Google OAuth callback should be registered as:", supabaseUrl + "/auth/v1/callback");
-    }
-  }, []);
-
-  const selectedEmail = email.trim();
+  const clearError = () => setErrorMessage(null);
 
   const selectMode = (nextMode: AuthMode) => {
     setMode(nextMode);
-    setEmailStep("email");
     setPassword("");
-    setOtp("");
-    setOtpSent(false);
+    setErrorMessage(null);
     setResetSent(false);
   };
 
-  const continueEmail = (e: React.FormEvent) => {
+  const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmail) {
-      toast.error("Enter your email address first.");
-      return;
-    }
-    setEmail(selectedEmail);
-    setEmailStep("details");
-  };
-
-  const requestPasswordReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const address = email.trim();
-    if (!address) {
-      toast.error("Enter your email to reset your password.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await auth.resetPassword(address);
-    setLoading(false);
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    setResetSent(true);
-    toast.success("Password reset email sent. Check your inbox.");
-  };
-
-  const enterResetMode = () => {
-    selectMode("reset");
-  };
-
-  const returnToSignIn = () => {
-    selectMode("signin");
-  };
-
-  const handleEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
+    clearError();
     setLoading(true);
     try {
       if (mode === "signup") {
-        const { error } = await auth.signUpWithEmail(selectedEmail, password, fullName);
+        const { error } = await auth.signUpWithEmail(email.trim(), password, fullName);
         if (error) throw error;
         toast.success("Check your email to confirm your account.");
+        selectMode("signin");
       } else {
-        const { error } = await auth.signInWithEmail(selectedEmail, password);
+        const { error } = await auth.signInWithEmail(email.trim(), password);
         if (error) throw error;
-        navigate({ to: "/rides" });
+        navigate({ to: "/" });
       }
     } catch (err: any) {
-      toast.error(err.message ?? "Authentication failed");
+      setErrorMessage(friendlyError(err.message || "Something went wrong. Please try again."));
     } finally {
       setLoading(false);
     }
   };
 
-  const sendOtp = async () => {
-    const phoneNumber = normalizePhoneNumber(phone);
-    if (!isValidInternationalPhone(phoneNumber)) {
-      toast.error("Enter a valid phone number with country code, e.g. +27712345678.");
+  const handleResetRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearError();
+    if (!email.trim()) {
+      setErrorMessage("Please enter your email address.");
       return;
     }
-
-    setPhone(phoneNumber);
     setLoading(true);
-    const { error } = await auth.signInWithPhoneOtp(phoneNumber, mode === "signup");
+    const { error } = await auth.resetPassword(email.trim());
     setLoading(false);
-
     if (error) {
-      if (mode === "signin" && isMissingPhoneAccountError(error.message)) {
-        toast.error("No account exists for this phone number. Switch to Sign up to create one.");
-        return;
-      }
-      toast.error(error.message);
+      setErrorMessage(friendlyError(error.message));
       return;
     }
-
-    setOtpSent(true);
-    toast.success(
-      mode === "signin" ? "Phone number found. Code sent via SMS." : "Code sent via SMS.",
-    );
+    setResetSent(true);
+    toast.success("Password reset link sent to your email.");
   };
 
-  const verifyOtp = async () => {
-    const phoneNumber = normalizePhoneNumber(phone);
-    if (!otp.trim()) {
-      toast.error("Enter the SMS code.");
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    clearError();
+    if (password.length < 6) {
+      setErrorMessage("Password must be at least 6 characters.");
       return;
     }
-
     setLoading(true);
-    const { error } = await auth.verifyPhoneOtp(phoneNumber, otp.trim());
+    const { error } = await auth.updatePassword(password);
     setLoading(false);
-
     if (error) {
-      toast.error(error.message);
+      setErrorMessage(friendlyError(error.message));
       return;
     }
-    navigate({ to: "/rides" });
+    toast.success("Password updated successfully!");
+    selectMode("signin");
   };
 
   const oauth = async (provider: "google" | "apple") => {
     setLoading(true);
-    const res =
-      provider === "google"
-        ? await auth.signInWithGoogle(window.location.origin + "/auth")
-        : await auth.signInWithApple(window.location.origin + "/auth");
-
+    const res = provider === "google"
+      ? await auth.signInWithGoogle(window.location.origin + "/auth")
+      : await auth.signInWithApple(window.location.origin + "/auth");
     if (res.error) {
       setLoading(false);
-      toast.error(res.error.message ?? "Sign-in failed");
-      return;
+      setErrorMessage(friendlyError(res.error.message || "Sign-in failed. Please try again."));
     }
-    if (!res.redirected) {
-      setLoading(false);
-      navigate({ to: "/rides" });
-    }
+    // If redirected, page will reload automatically
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-10">
+    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/30 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-primary">VayaRide</h1>
-          <p className="text-sm text-muted-foreground mt-1">Welcome — let's get you a ride.</p>
-        </div>
+        <VayaRideLogo />
 
-        <div className="rounded-2xl bg-card border p-5 shadow-sm">
-          <div className="flex gap-2 mb-4">
-            <button
-              type="button"
-              onClick={() => selectMode("signin")}
-              aria-pressed={mode === "signin"}
-              className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
-                mode === "signin" ? "bg-primary text-primary-foreground" : "bg-muted"
-              }`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => selectMode("signup")}
-              aria-pressed={mode === "signup"}
-              className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
-                mode === "signup" ? "bg-primary text-primary-foreground" : "bg-muted"
-              }`}
-            >
-              Sign up
-            </button>
+        {/* Error Banner */}
+        {errorMessage && (
+          <div className="mb-4 rounded-2xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex items-start gap-2">
+            <div className="h-5 w-5 rounded-full bg-destructive/20 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-xs font-bold text-destructive">!</span>
+            </div>
+            <p className="text-sm text-destructive">{errorMessage}</p>
           </div>
+        )}
 
-          <Tabs defaultValue="email">
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="email">Email</TabsTrigger>
-              <TabsTrigger value="phone">Phone</TabsTrigger>
-            </TabsList>
+        {mode === "reset" ? (
+          // ── Password Reset ──────────────────────────────
+          <div className="rounded-3xl bg-card border shadow-lg p-6">
+            <button
+              onClick={() => selectMode("signin")}
+              className="flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back
+            </button>
 
-            <TabsContent value="email" className="mt-4">
-              {mode === "reset" ? (
-                // ── Password Reset Flow ──────────────────────────
-                <div className="mt-4 space-y-3">
-                  {resetSent ? (
-                    <div className="text-center py-4">
-                      <p className="text-sm font-medium">Check your email</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        We sent a password reset link to <strong>{email}</strong>. Click it to reset your password.
-                      </p>
-                      <Button
-                        variant="outline"
-                        className="mt-4"
-                        onClick={returnToSignIn}
-                      >
-                        Back to sign in
-                      </Button>
-                    </div>
-                  ) : emailStep === "details" ? (
-                    // Update password form (after clicking reset link)
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        if (password.length < 6) {
-                          toast.error("Password must be at least 6 characters.");
-                          return;
-                        }
-                        setLoading(true);
-                        const { error } = await auth.updatePassword(password);
-                        setLoading(false);
-                        if (error) {
-                          toast.error(error.message);
-                          return;
-                        }
-                        toast.success("Password updated successfully!");
-                        selectMode("signin");
-                      }}
-                      className="space-y-3"
-                    >
-                      <p className="text-sm font-medium">Set a new password</p>
-                      <div>
-                        <Label>New password</Label>
-                        <Input
-                          type="password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          required
-                          minLength={6}
-                          placeholder="At least 6 characters"
-                        />
-                      </div>
-                      <Button type="submit" disabled={loading} className="w-full h-11">
-                        Update password
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={returnToSignIn}
-                        className="w-full text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        Back to sign in
-                      </button>
-                    </form>
-                  ) : (
-                    // Request reset email
-                    <form onSubmit={requestPasswordReset} className="space-y-3">
-                      <p className="text-sm font-medium">Reset your password</p>
-                      <div>
-                        <Label>Email</Label>
-                        <Input
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          required
-                        />
-                      </div>
-                      <Button type="submit" disabled={loading} className="w-full h-11">
-                        Send reset link
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={returnToSignIn}
-                        className="w-full text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        Back to sign in
-                      </button>
-                    </form>
-                  )}
+            {resetSent ? (
+              <div className="text-center py-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <Mail className="h-6 w-6 text-primary" />
                 </div>
-              ) : emailStep === "email" ? (
-                <form onSubmit={continueEmail} className="space-y-3">
+                <p className="font-semibold">Check your email</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  We sent a reset link to <strong>{email}</strong>
+                </p>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold mb-1">Reset password</h2>
+                <p className="text-sm text-muted-foreground mb-4">Enter your email and we'll send you a reset link.</p>
+                <form onSubmit={handleResetRequest} className="space-y-4">
                   <div>
-                    <Label>Email</Label>
+                    <Label htmlFor="reset-email">Email</Label>
                     <Input
+                      id="reset-email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
                       required
+                      className="h-12 rounded-xl mt-1"
                     />
                   </div>
-                  <Button type="submit" disabled={loading} className="w-full h-11">
-                    Continue
+                  <Button type="submit" disabled={loading} className="w-full h-12 rounded-xl text-base">
+                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Send reset link"}
                   </Button>
                 </form>
-              ) : (
-                <form onSubmit={handleEmail} className="space-y-3">
-                  <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Email address</p>
-                      <p className="truncate text-sm font-medium">{selectedEmail}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailStep("email");
-                        setPassword("");
-                      }}
-                      className="text-xs font-medium text-primary hover:underline"
-                    >
-                      Change
-                    </button>
-                  </div>
-                  {mode === "signup" && (
-                    <div>
-                      <Label>Full name</Label>
-                      <Input
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        required
-                      />
-                    </div>
-                  )}
-                  <div>
-                    <Label>Password</Label>
-                    <Input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      minLength={6}
-                    />
-                  </div>
-                  {mode === "signin" && (
-                    <button
-                      type="button"
-                      onClick={enterResetMode}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      Forgot password?
-                    </button>
-                  )}
-                  <Button type="submit" disabled={loading} className="w-full h-11">
-                    {mode === "signup" ? "Create account" : "Sign in"}
-                  </Button>
-                </form>
-              )}
-            </TabsContent>
+              </>
+            )}
+          </div>
+        ) : (
+          // ── Sign In / Sign Up ───────────────────────────
+          <div className="rounded-3xl bg-card border shadow-lg p-6">
+            {/* Mode Toggle */}
+            <div className="flex bg-muted rounded-xl p-1 mb-5">
+              <button
+                type="button"
+                onClick={() => selectMode("signin")}
+                className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
+                  mode === "signin" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => selectMode("signup")}
+                className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
+                  mode === "signup" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
 
-            <TabsContent value="phone" className="mt-4 space-y-3">
+            <form onSubmit={handleEmailAuth} className="space-y-4">
               <div>
-                <Label>Phone (with country code)</Label>
+                <Label htmlFor="auth-email">Email</Label>
                 <Input
-                  placeholder="+27 71 234 5678"
-                  value={phone}
-                  onChange={(e) => {
-                    setPhone(e.target.value);
-                    setOtp("");
-                    setOtpSent(false);
-                  }}
-                  disabled={otpSent}
+                  id="auth-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                  className="h-12 rounded-xl mt-1"
                 />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {mode === "signin"
-                    ? "We will only send a code if this number already exists."
-                    : "We will send a code to create or confirm this phone login."}
-                </p>
               </div>
-              {!otpSent ? (
-                <Button onClick={sendOtp} disabled={loading} className="w-full h-11">
-                  {mode === "signin" ? "Verify phone" : "Continue with phone"}
-                </Button>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground">Phone number</p>
-                      <p className="truncate text-sm font-medium">{phone}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOtp("");
-                        setOtpSent(false);
-                      }}
-                      className="text-xs font-medium text-primary hover:underline"
-                    >
-                      Change
-                    </button>
-                  </div>
-                  <div>
-                    <Label>6-digit code</Label>
-                    <Input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" />
-                  </div>
-                  <Button onClick={verifyOtp} disabled={loading} className="w-full h-11">
-                    Verify
-                  </Button>
-                </>
+
+              {mode === "signup" && (
+                <div>
+                  <Label htmlFor="auth-name">Full name</Label>
+                  <Input
+                    id="auth-name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Your name"
+                    required
+                    className="h-12 rounded-xl mt-1"
+                  />
+                </div>
               )}
-            </TabsContent>
-          </Tabs>
 
-          <div className="relative my-5">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t" />
+              <div>
+                <Label htmlFor="auth-password">Password</Label>
+                <div className="relative mt-1">
+                  <Input
+                    id="auth-password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    placeholder={mode === "signup" ? "At least 6 characters" : "Enter your password"}
+                    className="h-12 rounded-xl pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {mode === "signin" && (
+                  <button
+                    type="button"
+                    onClick={() => selectMode("reset")}
+                    className="mt-2 text-sm text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
+
+              <Button type="submit" disabled={loading} className="w-full h-12 rounded-xl text-base font-semibold">
+                {loading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : mode === "signup" ? (
+                  "Create Account"
+                ) : (
+                  "Sign In"
+                )}
+              </Button>
+            </form>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-card px-3 text-xs text-muted-foreground">or continue with</span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-2 text-muted-foreground">or</span>
+
+            {/* Social Logins */}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => oauth("google")}
+                disabled={loading}
+                className="w-full h-12 rounded-xl border bg-background hover:bg-muted/50 transition-colors flex items-center justify-center gap-3 text-sm font-medium disabled:opacity-50"
+              >
+                <GoogleIcon />
+                Continue with Google
+              </button>
+              <button
+                type="button"
+                onClick={() => oauth("apple")}
+                disabled={loading}
+                className="w-full h-12 rounded-xl border bg-neutral-900 text-white hover:bg-neutral-800 transition-colors flex items-center justify-center gap-3 text-sm font-medium disabled:opacity-50"
+              >
+                <AppleIcon />
+                Continue with Apple
+              </button>
             </div>
           </div>
+        )}
 
-          <div className="space-y-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 justify-center gap-3 rounded-md border-neutral-900 bg-neutral-950 font-semibold text-white hover:bg-neutral-900 hover:text-white [&_svg]:size-5"
-              onClick={() => oauth("google")}
-              disabled={loading}
-            >
-              <GoogleIcon />
-              Continue with Google
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 justify-center gap-3 rounded-md border-neutral-900 bg-neutral-950 font-semibold text-white hover:bg-neutral-900 hover:text-white [&_svg]:size-5"
-              onClick={() => oauth("apple")}
-              disabled={loading}
-            >
-              <AppleIcon />
-              Continue with Apple
-            </Button>
-          </div>
-        </div>
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          By continuing, you agree to our Terms and Privacy Policy.
+        </p>
       </div>
     </div>
   );
@@ -506,34 +351,19 @@ function AuthPage() {
 
 function GoogleIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="#4285F4"
-        d="M21.8 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.5c-.2 1.2-1 2.3-2 3v2.5h3.2c1.9-1.7 3.1-4.3 3.1-7.2Z"
-      />
-      <path
-        fill="#34A853"
-        d="M12 22c2.7 0 5-.9 6.7-2.5l-3.2-2.5c-.9.6-2 1-3.5 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6C4.8 19.7 8.1 22 12 22Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M6.4 13.9c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9V7.5H3.1C2.4 8.9 2 10.4 2 12s.4 3.1 1.1 4.5l3.3-2.6Z"
-      />
-      <path
-        fill="#EA4335"
-        d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9C17 3 14.7 2 12 2 8.1 2 4.8 4.3 3.1 7.5l3.3 2.6C7.2 7.8 9.4 6 12 6Z"
-      />
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <path fill="#4285F4" d="M21.8 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.5c-.2 1.2-1 2.3-2 3v2.5h3.2c1.9-1.7 3.1-4.3 3.1-7.2Z" />
+      <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.7-2.5l-3.2-2.5c-.9.6-2 1-3.5 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6C4.8 19.7 8.1 22 12 22Z" />
+      <path fill="#FBBC05" d="M6.4 13.9c-.2-.6-.3-1.2-.3-1.9s.1-1.3.3-1.9V7.5H3.1C2.4 8.9 2 10.4 2 12s.4 3.1 1.1 4.5l3.3-2.6Z" />
+      <path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9C17 3 14.7 2 12 2 8.1 2 4.8 4.3 3.1 7.5l3.3 2.6C7.2 7.8 9.4 6 12 6Z" />
     </svg>
   );
 }
 
 function AppleIcon() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path
-        fill="currentColor"
-        d="M16.4 1.5c0 1.1-.4 2.1-1.2 2.9-.9.9-1.9 1.3-2.9 1.3-.1-1.1.4-2.2 1.2-3 .8-.8 2.2-1.4 2.9-1.2ZM20.4 17.1c-.6 1.3-.9 1.9-1.6 3.1-1 1.6-2.5 3.5-4.2 3.5-1.6 0-2-.9-4.2-.9s-2.6 1-4.2.9c-1.8 0-3.1-1.8-4.2-3.4-2.9-4.4-3.2-9.6-1.4-12.4 1.3-2 3.2-3.1 5.1-3.1s3.1 1 4.7 1c1.5 0 2.4-1 4.6-1 1.7 0 3.4.9 4.7 2.4-4.1 2.2-3.5 7.8.7 9.9Z"
-      />
+    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+      <path d="M16.4 1.5c0 1.1-.4 2.1-1.2 2.9-.9.9-1.9 1.3-2.9 1.3-.1-1.1.4-2.2 1.2-3 .8-.8 2.2-1.4 2.9-1.2ZM20.4 17.1c-.6 1.3-.9 1.9-1.6 3.1-1 1.6-2.5 3.5-4.2 3.5-1.6 0-2-.9-4.2-.9s-2.6 1-4.2.9c-1.8 0-3.1-1.8-4.2-3.4-2.9-4.4-3.2-9.6-1.4-12.4 1.3-2 3.2-3.1 5.1-3.1s3.1 1 4.7 1c1.5 0 2.4-1 4.6-1 1.7 0 3.4.9 4.7 2.4-4.1 2.2-3.5 7.8.7 9.9Z" />
     </svg>
   );
 }
